@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  repository_dispatch:
 
 permissions:
   checks: write
@@ -15,7 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     if: github.actor != 'github-classroom[bot]'
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -26,9 +28,9 @@ jobs:
         run: pip install pyperplan
 
       # Fast Downward is an optional fallback for PDDL features pyperplan cannot
-      # ground (e.g. :action-costs, :numeric-fluents). The build is cached so it
-      # only runs once. If the build fails, the autograder still works on every
-      # STRIPS/typing model via pyperplan.
+      # ground (:action-costs, :numeric-fluents, :durative-actions). The build is
+      # cached so it runs once. If it fails, every STRIPS/typing model is still
+      # graded via pyperplan.
       - name: Cache Fast Downward
         id: cache-fd
         uses: actions/cache@v4
@@ -51,5 +53,98 @@ jobs:
             echo "FAST_DOWNWARD=$GITHUB_WORKSPACE/downward/fast-downward.py" >> "$GITHUB_ENV"
           fi
 
-      - name: Autograding
-        uses: education/autograding@v1
+      - name: T1_GRIPPER_PARSE
+        id: t1
+        uses: classroom-resources/autograding-command-grader@v1
+        with:
+          test-name: T1_GRIPPER_PARSE
+          command: python3 tests/autograder.py T1_GRIPPER_PARSE
+          timeout: 3
+          max-score: 2
+
+      - name: T2_GRIPPER_PLAN
+        id: t2
+        uses: classroom-resources/autograding-command-grader@v1
+        with:
+          test-name: T2_GRIPPER_PLAN
+          command: python3 tests/autograder.py T2_GRIPPER_PLAN
+          timeout: 6
+          max-score: 5
+
+      - name: T3_VACUUM_PARSE
+        id: t3
+        uses: classroom-resources/autograding-command-grader@v1
+        with:
+          test-name: T3_VACUUM_PARSE
+          command: python3 tests/autograder.py T3_VACUUM_PARSE
+          timeout: 3
+          max-score: 2
+
+      - name: T4_VACUUM_PLAN
+        id: t4
+        uses: classroom-resources/autograding-command-grader@v1
+        with:
+          test-name: T4_VACUUM_PLAN
+          command: python3 tests/autograder.py T4_VACUUM_PLAN
+          timeout: 6
+          max-score: 5
+
+      - name: T5_VACUUM_GOAL
+        id: t5
+        uses: classroom-resources/autograding-command-grader@v1
+        with:
+          test-name: T5_VACUUM_GOAL
+          command: python3 tests/autograder.py T5_VACUUM_GOAL
+          timeout: 6
+          max-score: 5
+
+      - name: T6_TRANSPORT_PARSE
+        id: t6
+        uses: classroom-resources/autograding-command-grader@v1
+        with:
+          test-name: T6_TRANSPORT_PARSE
+          command: python3 tests/autograder.py T6_TRANSPORT_PARSE
+          timeout: 6
+          max-score: 3
+
+      - name: T7_TRANSPORT_PLAN
+        id: t7
+        uses: classroom-resources/autograding-command-grader@v1
+        with:
+          test-name: T7_TRANSPORT_PLAN
+          command: python3 tests/autograder.py T7_TRANSPORT_PLAN
+          timeout: 6
+          max-score: 7
+
+      - name: T8_TRANSPORT_TYPING
+        id: t8
+        uses: classroom-resources/autograding-command-grader@v1
+        with:
+          test-name: T8_TRANSPORT_TYPING
+          command: python3 tests/autograder.py T8_TRANSPORT_TYPING
+          timeout: 3
+          max-score: 5
+
+      - name: T9_TRANSPORT_MULTI
+        id: t9
+        uses: classroom-resources/autograding-command-grader@v1
+        with:
+          test-name: T9_TRANSPORT_MULTI
+          command: python3 tests/autograder.py T9_TRANSPORT_MULTI
+          timeout: 6
+          max-score: 6
+
+      - name: Autograding Reporter
+        uses: classroom-resources/autograding-grading-reporter@v1
+        env:
+          T1_RESULTS: "${{steps.t1.outputs.result}}"
+          T2_RESULTS: "${{steps.t2.outputs.result}}"
+          T3_RESULTS: "${{steps.t3.outputs.result}}"
+          T4_RESULTS: "${{steps.t4.outputs.result}}"
+          T5_RESULTS: "${{steps.t5.outputs.result}}"
+          T6_RESULTS: "${{steps.t6.outputs.result}}"
+          T7_RESULTS: "${{steps.t7.outputs.result}}"
+          T8_RESULTS: "${{steps.t8.outputs.result}}"
+          T9_RESULTS: "${{steps.t9.outputs.result}}"
+        with:
+          runners: t1,t2,t3,t4,t5,t6,t7,t8,t9
