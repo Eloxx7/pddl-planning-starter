@@ -1,10 +1,17 @@
 name: Autograding Tests
 
+# Self-contained autograder. Uses only GitHub-owned actions (checkout / setup-python
+# / cache) so it runs under any organization "allowed actions" policy. It runs the
+# PDDL tests directly and prints a graded summary to the Actions run summary.
+#
+# NOTE: this does not feed the GitHub Classroom "autograding" points panel, which
+# requires the classroom-resources/* actions. If your org allows those actions, you
+# can switch back to the command-grader + grading-reporter workflow.
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
-  repository_dispatch:
 
 permissions:
   checks: write
@@ -28,9 +35,9 @@ jobs:
         run: pip install pyperplan
 
       # Fast Downward is an optional fallback for PDDL features pyperplan cannot
-      # ground (:action-costs, :numeric-fluents, :durative-actions). The build is
-      # cached so it runs once. If it fails, every STRIPS/typing model is still
-      # graded via pyperplan.
+      # ground (:action-costs, :numeric-fluents, :durative-actions). Cached so it
+      # builds once. If it fails, every STRIPS/typing model is still graded via
+      # pyperplan.
       - name: Cache Fast Downward
         id: cache-fd
         uses: actions/cache@v4
@@ -46,105 +53,49 @@ jobs:
           git clone --depth 1 --branch release-24.06 https://github.com/aibasel/downward.git
           cd downward && ./build.py
 
-      - name: Expose Fast Downward to the autograder
-        if: always()
+      - name: Run autograder
+        shell: bash
         run: |
           if [ -f downward/fast-downward.py ]; then
-            echo "FAST_DOWNWARD=$GITHUB_WORKSPACE/downward/fast-downward.py" >> "$GITHUB_ENV"
+            export FAST_DOWNWARD="$GITHUB_WORKSPACE/downward/fast-downward.py"
           fi
 
-      - name: T1_GRIPPER_PARSE
-        id: t1
-        uses: classroom-resources/autograding-command-grader@v1
-        with:
-          test-name: T1_GRIPPER_PARSE
-          command: python3 tests/autograder.py T1_GRIPPER_PARSE
-          timeout: 3
-          max-score: 2
+          declare -A PTS=(
+            [T1_GRIPPER_PARSE]=2  [T2_GRIPPER_PLAN]=5
+            [T3_VACUUM_PARSE]=2   [T4_VACUUM_PLAN]=5   [T5_VACUUM_GOAL]=5
+            [T6_TRANSPORT_PARSE]=3 [T7_TRANSPORT_PLAN]=7
+            [T8_TRANSPORT_TYPING]=5 [T9_TRANSPORT_MULTI]=6
+          )
+          ORDER=(T1_GRIPPER_PARSE T2_GRIPPER_PLAN T3_VACUUM_PARSE T4_VACUUM_PLAN \
+                 T5_VACUUM_GOAL T6_TRANSPORT_PARSE T7_TRANSPORT_PLAN \
+                 T8_TRANSPORT_TYPING T9_TRANSPORT_MULTI)
 
-      - name: T2_GRIPPER_PLAN
-        id: t2
-        uses: classroom-resources/autograding-command-grader@v1
-        with:
-          test-name: T2_GRIPPER_PLAN
-          command: python3 tests/autograder.py T2_GRIPPER_PLAN
-          timeout: 6
-          max-score: 5
+          earned=0; total=0; failed=0
+          echo "| Test | Result | Points |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|--------|--------|" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: T3_VACUUM_PARSE
-        id: t3
-        uses: classroom-resources/autograding-command-grader@v1
-        with:
-          test-name: T3_VACUUM_PARSE
-          command: python3 tests/autograder.py T3_VACUUM_PARSE
-          timeout: 3
-          max-score: 2
+          for t in "${ORDER[@]}"; do
+            p=${PTS[$t]}; total=$((total + p))
+            echo "::group::$t"
+            if out=$(python3 tests/autograder.py "$t" 2>&1); then
+              echo "$out"; echo "::endgroup::"
+              earned=$((earned + p))
+              echo "| $t | ✅ pass | $p / $p |" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "$out"; echo "::endgroup::"
+              failed=$((failed + 1))
+              echo "| $t | ❌ fail | 0 / $p |" >> "$GITHUB_STEP_SUMMARY"
+              echo "::error title=$t::$out"
+            fi
+          done
 
-      - name: T4_VACUUM_PLAN
-        id: t4
-        uses: classroom-resources/autograding-command-grader@v1
-        with:
-          test-name: T4_VACUUM_PLAN
-          command: python3 tests/autograder.py T4_VACUUM_PLAN
-          timeout: 6
-          max-score: 5
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Total: $earned / $total points** ($failed test(s) failed)" >> "$GITHUB_STEP_SUMMARY"
+          echo "=============================================="
+          echo "  TOTAL: $earned / $total points  ($failed failed)"
+          echo "=============================================="
 
-      - name: T5_VACUUM_GOAL
-        id: t5
-        uses: classroom-resources/autograding-command-grader@v1
-        with:
-          test-name: T5_VACUUM_GOAL
-          command: python3 tests/autograder.py T5_VACUUM_GOAL
-          timeout: 6
-          max-score: 5
+          # Clean up planner artifacts so they are not left in the workspace.
+          rm -f task*/problem.pddl.soln
 
-      - name: T6_TRANSPORT_PARSE
-        id: t6
-        uses: classroom-resources/autograding-command-grader@v1
-        with:
-          test-name: T6_TRANSPORT_PARSE
-          command: python3 tests/autograder.py T6_TRANSPORT_PARSE
-          timeout: 6
-          max-score: 3
-
-      - name: T7_TRANSPORT_PLAN
-        id: t7
-        uses: classroom-resources/autograding-command-grader@v1
-        with:
-          test-name: T7_TRANSPORT_PLAN
-          command: python3 tests/autograder.py T7_TRANSPORT_PLAN
-          timeout: 6
-          max-score: 7
-
-      - name: T8_TRANSPORT_TYPING
-        id: t8
-        uses: classroom-resources/autograding-command-grader@v1
-        with:
-          test-name: T8_TRANSPORT_TYPING
-          command: python3 tests/autograder.py T8_TRANSPORT_TYPING
-          timeout: 3
-          max-score: 5
-
-      - name: T9_TRANSPORT_MULTI
-        id: t9
-        uses: classroom-resources/autograding-command-grader@v1
-        with:
-          test-name: T9_TRANSPORT_MULTI
-          command: python3 tests/autograder.py T9_TRANSPORT_MULTI
-          timeout: 6
-          max-score: 6
-
-      - name: Autograding Reporter
-        uses: classroom-resources/autograding-grading-reporter@v1
-        env:
-          T1_RESULTS: "${{steps.t1.outputs.result}}"
-          T2_RESULTS: "${{steps.t2.outputs.result}}"
-          T3_RESULTS: "${{steps.t3.outputs.result}}"
-          T4_RESULTS: "${{steps.t4.outputs.result}}"
-          T5_RESULTS: "${{steps.t5.outputs.result}}"
-          T6_RESULTS: "${{steps.t6.outputs.result}}"
-          T7_RESULTS: "${{steps.t7.outputs.result}}"
-          T8_RESULTS: "${{steps.t8.outputs.result}}"
-          T9_RESULTS: "${{steps.t9.outputs.result}}"
-        with:
-          runners: t1,t2,t3,t4,t5,t6,t7,t8,t9
+          [ "$failed" -eq 0 ]
